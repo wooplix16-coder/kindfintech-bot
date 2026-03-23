@@ -1,201 +1,283 @@
-const express = require('express');
-const cors = require('cors');
-const app = express();
+const express = require("express");
+const axios = require("axios");
 
-app.use(cors());
+const app = express();
 app.use(express.json());
 
-// In-memory session store (mock Redis for free tier)
+const PORT = process.env.PORT || 3000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+
+// ─── FAQ Knowledge Base ───────────────────────────────────────────────────────
+// Add your client's FAQs here. This gets injected into Gemini's system prompt.
+const FAQ_CONTENT = `
+COMPANY: Kind Fintech
+PRODUCT: KindSwap - a fintech platform for currency exchange and financial services.
+
+FREQUENTLY ASKED QUESTIONS:
+
+Q: How do I reset my password?
+A: Go to Settings > Security > Reset Password. Enter your registered email and follow the link sent to you.
+
+Q: How long does a transfer take?
+A: Most transfers complete within 24 hours. International transfers may take 2-3 business days.
+
+Q: What are your fees?
+A: KindSwap charges 0.5% per transaction with no hidden fees. International transfers have a flat fee of $2.
+
+Q: How do I verify my account?
+A: Upload a government-issued ID and a selfie in the Verification section of your profile.
+
+Q: Is my money safe?
+A: Yes. KindSwap uses bank-level 256-bit encryption and is regulated under applicable financial laws.
+
+Q: How do I contact support?
+A: You can chat with us here, email support@kindswap.world, or call +1-800-KIND-FIN during business hours.
+
+Q: How do I add a bank account?
+A: Go to Wallet > Add Account > select your bank and follow the verification steps.
+
+Q: What currencies do you support?
+A: We support 30+ currencies including USD, EUR, GBP, INR, AED, and more.
+
+Q: How do I cancel a transaction?
+A: Transactions can be cancelled within 30 minutes of initiation from the Transaction History screen.
+
+Q: What is the minimum transfer amount?
+A: The minimum transfer is $10 or equivalent in your local currency.
+`;
+
+// ─── Session Store (in-memory) ────────────────────────────────────────────────
 const sessions = {};
 
-// ─── Health Check ───────────────────────────────────────────────
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', bot: 'Kind Fintech Bot', timestamp: new Date().toISOString() });
-});
-
-// ─── Main Webhook ────────────────────────────────────────────────
-app.post('/api/salesiq/webhook', async (req, res) => {
-  try {
-    const { message, visitor, session_id } = req.body;
-
-    console.log(`[${session_id}] Message: ${message}`);
-
-    // Load or create session
-    if (!sessions[session_id]) {
-      sessions[session_id] = { history: [], escalated: false, negativeCount: 0 };
-    }
-    const session = sessions[session_id];
-
-    // Handle button payloads
-    if (message === 'feedback_positive') {
-      return res.json({
-        replies: [{ text: '😊 Great! Glad I could help. Is there anything else you need?' }]
-      });
-    }
-
-    if (message === 'feedback_negative') {
-      session.negativeCount++;
-      if (session.negativeCount >= 2) {
-        return res.json({
-          action: 'handoff',
-          replies: [{ text: "Let me connect you with a support agent who can help you better." }]
-        });
-      }
-      return res.json({
-        replies: [
-          { text: "I'm sorry that didn't help. Let me try again or I can escalate this." },
-          {
-            buttons: [
-              { label: '🔁 Try again', payload: 'retry' },
-              { label: '👤 Talk to agent', payload: 'request_human' },
-              { label: '🎫 Create ticket', payload: 'create_ticket' }
-            ]
-          }
-        ]
-      });
-    }
-
-    if (message === 'request_human') {
-      return res.json({
-        action: 'handoff',
-        replies: [{ text: "Connecting you to a live agent now. Please wait a moment..." }]
-      });
-    }
-
-    if (message === 'create_ticket') {
-      return res.json({
-        action: 'create_ticket',
-        ticket: {
-          subject: 'Customer Support Request',
-          description: buildTranscript(session.history),
-          priority: 'Medium'
-        },
-        replies: [{ text: "✅ I've raised a support ticket for you. Our team will respond within 24 hours via email." }]
-      });
-    }
-
-    // Call Claude API
-    session.history.push({ role: 'user', content: message });
-    const aiReply = await callClaude(session.history, visitor);
-    session.history.push({ role: 'assistant', content: aiReply });
-
-    // Check for escalation signal
-    if (aiReply.includes('[ESCALATE]')) {
-      const cleanReply = aiReply.replace('[ESCALATE]', '').trim();
-      return res.json({
-        replies: [
-          { text: cleanReply },
-          {
-            buttons: [
-              { label: '👤 Talk to agent', payload: 'request_human' },
-              { label: '🎫 Create a ticket', payload: 'create_ticket' }
-            ]
-          }
-        ]
-      });
-    }
-
-    // Standard response with feedback buttons
-    return res.json({
-      replies: [
-        { text: aiReply },
-        {
-          buttons: [
-            { label: '✅ Yes, helped!', payload: 'feedback_positive' },
-            { label: '❌ Need more help', payload: 'feedback_negative' }
-          ]
-        }
-      ]
-    });
-
-  } catch (err) {
-    console.error('Webhook error:', err.message);
-    res.json({
-      replies: [{ text: "I'm having trouble right now. Please try again in a moment or contact support directly." }]
-    });
+function getSession(sessionId) {
+  if (!sessions[sessionId]) {
+    sessions[sessionId] = { history: [], escalationCount: 0 };
   }
-});
-
-// ─── Agent Handoff Callback ──────────────────────────────────────
-app.post('/api/salesiq/webhook/handoff', (req, res) => {
-  console.log('Handoff occurred:', req.body);
-  res.json({ status: 'logged' });
-});
-
-// ─── Claude API Call ─────────────────────────────────────────────
-async function callClaude(history, visitor) {
-  const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
-
-  if (!CLAUDE_API_KEY) {
-    // Mock response if no API key set (for initial testing)
-    return getMockResponse(history[history.length - 1].content);
-  }
-
-  const systemPrompt = buildSystemPrompt(visitor);
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: history
-    })
-  });
-
-  const data = await response.json();
-
-  if (data.error) throw new Error(data.error.message);
-  return data.content[0].text;
+  return sessions[sessionId];
 }
 
-// ─── System Prompt ───────────────────────────────────────────────
-function buildSystemPrompt(visitor) {
-  return `You are a helpful customer support assistant for Kind Fintech (kindswap.world).
-Your job is to answer customer questions clearly and concisely.
+// ─── Call Gemini API ──────────────────────────────────────────────────────────
+async function callGemini(sessionId, userMessage, visitorInfo) {
+  const session = getSession(sessionId);
+
+  const systemPrompt = `You are a helpful customer support assistant for Kind Fintech (KindSwap).
+
+IMPORTANT RULES:
+1. Answer questions ONLY from the FAQ knowledge base provided below.
+2. If the question is not covered in the FAQ, say "I don't have information on that, let me connect you with a support agent." and include [ESCALATE] at the end of your response.
+3. Keep responses concise, friendly, and professional.
+4. Never make up information or prices not in the FAQ.
+5. If the visitor asks to speak to a human, include [ESCALATE] in your response.
+6. If the visitor seems frustrated or repeats the same question, include [ESCALATE] in your response.
 
 VISITOR INFO:
-- Name: ${visitor?.name || 'Guest'}
-- Page: ${visitor?.current_page || 'website'}
+- Name: ${visitorInfo.name || "Visitor"}
+- Email: ${visitorInfo.email || "Not provided"}
+- Current Page: ${visitorInfo.current_page || "Unknown"}
 
-KNOWLEDGE BASE:
-- Kind Fintech provides financial technology services
-- Support hours: Mon-Fri 9AM-6PM IST
-- For account issues, customers need their registered email
-- Refunds take 5-7 business days
-- Technical issues can be reported via ticket
-- Contact email: support@kindswap.world
+FAQ KNOWLEDGE BASE:
+${FAQ_CONTENT}`;
 
-RULES:
-1. Answer ONLY from the knowledge base above
-2. Be friendly, concise, and helpful
-3. If you cannot answer confidently, include [ESCALATE] at the START of your reply, then explain what you know
-4. Never make up information
-5. Keep responses under 100 words`;
+  // Build conversation history for context
+  const conversationHistory = session.history
+    .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
+    .join("\n");
+
+  const fullPrompt = conversationHistory
+    ? `${systemPrompt}\n\nCONVERSATION HISTORY:\n${conversationHistory}\n\nUser: ${userMessage}\nAssistant:`
+    : `${systemPrompt}\n\nUser: ${userMessage}\nAssistant:`;
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 500,
+      },
+    },
+    { headers: { "Content-Type": "application/json" } }
+  );
+
+  const aiText =
+    response.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+    "I'm sorry, I couldn't process your request. Let me connect you with a support agent. [ESCALATE]";
+
+  // Save to session history
+  session.history.push({ role: "user", content: userMessage });
+  session.history.push({ role: "assistant", content: aiText });
+
+  // Keep history to last 10 messages to avoid token bloat
+  if (session.history.length > 10) {
+    session.history = session.history.slice(-10);
+  }
+
+  return aiText;
 }
 
-// ─── Mock Response (when no API key) ────────────────────────────
+// ─── Mock Response (fallback if no API key) ───────────────────────────────────
 function getMockResponse(message) {
   const msg = message.toLowerCase();
-  if (msg.includes('refund')) return "Refunds typically take 5-7 business days to process. Please ensure your request is submitted with your registered email. Would this help?";
-  if (msg.includes('account') || msg.includes('login')) return "For account issues, please have your registered email ready. I can connect you with our team if needed.";
-  if (msg.includes('hours') || msg.includes('time')) return "Our support team is available Monday to Friday, 9AM to 6PM IST.";
-  if (msg.includes('hello') || msg.includes('hi')) return "Hello! 👋 Welcome to Kind Fintech support. How can I help you today?";
-  return "[ESCALATE] I don't have specific information about that in my knowledge base. Let me connect you with our support team who can help you better.";
+  if (msg.includes("password")) return "To reset your password, go to Settings > Security > Reset Password and follow the instructions sent to your email.";
+  if (msg.includes("fee") || msg.includes("cost") || msg.includes("price")) return "KindSwap charges 0.5% per transaction with no hidden fees. International transfers have a flat fee of $2.";
+  if (msg.includes("transfer") || msg.includes("how long")) return "Most transfers complete within 24 hours. International transfers may take 2-3 business days.";
+  if (msg.includes("verify") || msg.includes("verification")) return "To verify your account, upload a government-issued ID and a selfie in the Verification section of your profile.";
+  if (msg.includes("human") || msg.includes("agent") || msg.includes("support")) return "Let me connect you with a support agent right away. [ESCALATE]";
+  return "Thank you for your question! I can help you with password resets, transfers, fees, account verification, and more. Could you please provide more details about your issue?";
 }
 
-// ─── Build Transcript ────────────────────────────────────────────
-function buildTranscript(history) {
-  return history.map(m => `${m.role === 'user' ? 'Customer' : 'Bot'}: ${m.content}`).join('\n');
+// ─── Format SalesIQ Response ──────────────────────────────────────────────────
+function formatResponse(aiText, sessionId) {
+  const shouldEscalate = aiText.includes("[ESCALATE]");
+  const cleanText = aiText.replace("[ESCALATE]", "").trim();
+  const session = getSession(sessionId);
+
+  if (shouldEscalate) {
+    session.escalationCount++;
+    // If agents likely offline, create ticket instead
+    const hour = new Date().getHours();
+    const isBusinessHours = hour >= 9 && hour <= 18;
+
+    if (isBusinessHours) {
+      return {
+        action: "handoff",
+        replies: [{ type: "text", text: cleanText }],
+      };
+    } else {
+      return {
+        action: "create_ticket",
+        ticket: {
+          subject: "Support Request from KindBot",
+          description: `Customer needs assistance. Chat session: ${sessionId}`,
+          priority: "Medium",
+        },
+        replies: [
+          {
+            type: "text",
+            text: `${cleanText}\n\nOur team is currently offline. I've created a support ticket for you and we'll respond within 24 hours.`,
+          },
+        ],
+      };
+    }
+  }
+
+  // Normal response with feedback buttons
+  return {
+    replies: [
+      { type: "text", text: cleanText },
+      {
+        type: "buttons",
+        buttons: [
+          { label: "✅ Yes, this helped", payload: "feedback_positive" },
+          { label: "❌ No, I need more help", payload: "feedback_negative" },
+        ],
+      },
+    ],
+  };
 }
 
-// ─── Start Server ─────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
+// ─── Handle Button Payloads ───────────────────────────────────────────────────
+function handlePayload(payload, sessionId) {
+  if (payload === "feedback_positive") {
+    return {
+      replies: [
+        { type: "text", text: "Great! I'm glad I could help. 😊 Is there anything else you need?" },
+      ],
+    };
+  }
+  if (payload === "feedback_negative") {
+    const session = getSession(sessionId);
+    session.escalationCount++;
+    if (session.escalationCount >= 2) {
+      return {
+        action: "handoff",
+        replies: [{ type: "text", text: "I'm sorry I couldn't fully help. Let me connect you with a human agent who can assist you better." }],
+      };
+    }
+    return {
+      replies: [
+        { type: "text", text: "I'm sorry about that! Could you describe your issue in more detail so I can try to help better?" },
+      ],
+    };
+  }
+  return null;
+}
+
+// ─── Main Webhook Endpoint ────────────────────────────────────────────────────
+app.post("/api/salesiq/webhook", async (req, res) => {
+  try {
+    const { message, visitor = {}, session_id, context = {} } = req.body;
+    const payload = context?.button_payload || null;
+
+    console.log(`[${new Date().toISOString()}] Session: ${session_id} | Message: ${message}`);
+
+    // Handle button clicks
+    if (payload) {
+      const payloadResponse = handlePayload(payload, session_id);
+      if (payloadResponse) return res.json(payloadResponse);
+    }
+
+    // No message? Send welcome
+    if (!message || message.trim() === "") {
+      return res.json({
+        replies: [
+          { type: "text", text: `Hi ${visitor.name || "there"}! 👋 I'm KindBot, your KindSwap support assistant. How can I help you today?` },
+          {
+            type: "buttons",
+            buttons: [
+              { label: "💸 Transfer questions", payload: "topic_transfer" },
+              { label: "🔐 Account & security", payload: "topic_account" },
+              { label: "💰 Fees & pricing", payload: "topic_fees" },
+              { label: "🙋 Talk to a human", payload: "feedback_negative" },
+            ],
+          },
+        ],
+      });
+    }
+
+    let aiText;
+    if (GEMINI_API_KEY) {
+      aiText = await callGemini(session_id, message, visitor);
+    } else {
+      console.log("No GEMINI_API_KEY found — using mock responses");
+      aiText = getMockResponse(message);
+    }
+
+    const response = formatResponse(aiText, session_id);
+    return res.json(response);
+
+  } catch (error) {
+    console.error("Webhook error:", error?.response?.data || error.message);
+    return res.json({
+      replies: [
+        { type: "text", text: "I'm having a technical issue right now. Let me connect you with a support agent." },
+      ],
+      action: "handoff",
+    });
+  }
+});
+
+// ─── Handoff Callback ─────────────────────────────────────────────────────────
+app.post("/api/salesiq/webhook/handoff", (req, res) => {
+  console.log("Handoff event:", req.body);
+  res.json({ status: "ok" });
+});
+
+// ─── Health Check ─────────────────────────────────────────────────────────────
+app.get("/health", (req, res) => {
+  res.json({
+    status: "OK",
+    ai: GEMINI_API_KEY ? "Gemini API connected" : "Mock mode (add GEMINI_API_KEY)",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/", (req, res) => {
+  res.json({ message: "KindFintech Bot is running!", status: "OK" });
+});
+
+// ─── Start Server ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`✅ Kind Fintech Bot running on port ${PORT}`);
+  console.log(`✅ KindFintech Bot running on port ${PORT}`);
+  console.log(`🤖 AI Mode: ${GEMINI_API_KEY ? "Gemini API" : "Mock responses"}`);
 });
