@@ -9,7 +9,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// ─── Simple FAQ ───────────────────────────────────────────────────────────────
+// ─── FAQ ──────────────────────────────────────────────────────────────────────
 const FAQ = `
 Q: What are your fees?
 A: KindSwap charges 0.5% per transaction with no hidden fees. International transfers have a flat fee of $2.
@@ -65,16 +65,32 @@ Answer:
   }
 }
 
-// ─── Webhook ──────────────────────────────────────────────────────────────────
+// ─── Zoho Webhook ─────────────────────────────────────────────────────────────
 app.post("/api/salesiq/webhook", async (req, res) => {
   try {
-    const { message } = req.body;
+    console.log("📥 RAW BODY:", JSON.stringify(req.body, null, 2));
 
-    console.log("📩 Incoming:", message);
+    // 🔥 Extract message correctly from Zoho
+    const message = req.body?.message?.text || "";
+
+    console.log("📩 Extracted message:", message);
+
+    if (!message) {
+      return res.json({
+        action: "reply",
+        replies: [
+          {
+            type: "text",
+            text: "No message received."
+          }
+        ]
+      });
+    }
 
     const reply = await callGemini(message);
 
     return res.json({
+      action: "reply",
       replies: [
         {
           type: "text",
@@ -87,13 +103,13 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     console.error("🔥 FINAL ERROR:", error.message);
 
     return res.json({
+      action: "reply",
       replies: [
         {
           type: "text",
-          text: "AI failed. Check server logs."
+          text: "Something went wrong. Connecting to human."
         }
-      ],
-      action: "handoff"
+      ]
     });
   }
 });
