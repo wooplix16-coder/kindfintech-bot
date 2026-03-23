@@ -32,7 +32,7 @@ Answer:
 
   try {
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [
           {
@@ -98,11 +98,19 @@ app.post("/api/salesiq/webhook", async (req, res) => {
   }
 });
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     ai: GEMINI_API_KEY ? "Gemini connected" : "Missing key"
+  });
+});
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
+app.get("/", (req, res) => {
+  res.json({
+    message: "KindFintech Bot is running",
+    status: "OK"
   });
 });
 
