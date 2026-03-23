@@ -1,3 +1,5 @@
+console.log("🚀 NEW CODE DEPLOYED");
+
 const express = require("express");
 const axios = require("axios");
 
@@ -7,40 +9,24 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// ─── FAQ Knowledge Base ───────────────────────────────────────────────────────
-const FAQ_CONTENT = `
-COMPANY: Kind Fintech
-PRODUCT: KindSwap - a fintech platform for currency exchange and financial services.
-
+// ─── Simple FAQ ───────────────────────────────────────────────────────────────
+const FAQ = `
 Q: What are your fees?
 A: KindSwap charges 0.5% per transaction with no hidden fees. International transfers have a flat fee of $2.
 `;
 
-// ─── Session Store ────────────────────────────────────────────────────────────
-const sessions = {};
-
-function getSession(sessionId) {
-  if (!sessions[sessionId]) {
-    sessions[sessionId] = { history: [], escalationCount: 0 };
-  }
-  return sessions[sessionId];
-}
-
 // ─── Gemini Call ──────────────────────────────────────────────────────────────
-async function callGemini(sessionId, userMessage, visitorInfo) {
+async function callGemini(message) {
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY");
   }
 
-  const session = getSession(sessionId);
-
   const prompt = `
-You are a support assistant. Answer ONLY from FAQ.
+Answer ONLY using this FAQ:
 
-FAQ:
-${FAQ_CONTENT}
+${FAQ}
 
-User: ${userMessage}
+User: ${message}
 Answer:
 `;
 
@@ -48,27 +34,33 @@ Answer:
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
-        contents: [{ parts: [{ text: prompt }] }]
+        contents: [
+          {
+            parts: [{ text: prompt }]
+          }
+        ]
       },
       {
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json"
+        }
       }
     );
 
-    console.log("GEMINI RAW RESPONSE:", JSON.stringify(response.data, null, 2));
+    console.log("✅ GEMINI RESPONSE:", JSON.stringify(response.data, null, 2));
 
-    const aiText =
+    const text =
       response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!aiText) {
-      throw new Error("Empty response from Gemini");
+    if (!text) {
+      throw new Error("Empty Gemini response");
     }
 
-    return aiText;
+    return text;
 
   } catch (error) {
-    console.error("FULL ERROR:", JSON.stringify(error?.response?.data, null, 2));
-    console.error("MESSAGE:", error.message);
+    console.error("❌ FULL ERROR:", JSON.stringify(error?.response?.data, null, 2));
+    console.error("❌ MESSAGE:", error.message);
     throw error;
   }
 }
@@ -76,17 +68,11 @@ Answer:
 // ─── Webhook ──────────────────────────────────────────────────────────────────
 app.post("/api/salesiq/webhook", async (req, res) => {
   try {
-    const { message, session_id } = req.body;
+    const { message } = req.body;
 
-    console.log("Incoming message:", message);
+    console.log("📩 Incoming:", message);
 
-    let reply;
-
-    if (GEMINI_API_KEY) {
-      reply = await callGemini(session_id, message, {});
-    } else {
-      reply = "Mock response: API key missing.";
-    }
+    const reply = await callGemini(message);
 
     return res.json({
       replies: [
@@ -98,13 +84,13 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("FINAL ERROR:", error.message);
+    console.error("🔥 FINAL ERROR:", error.message);
 
     return res.json({
       replies: [
         {
           type: "text",
-          text: "AI failed. Check logs."
+          text: "AI failed. Check server logs."
         }
       ],
       action: "handoff"
@@ -120,6 +106,8 @@ app.get("/health", (req, res) => {
   });
 });
 
+// ─── Start Server ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🤖 AI Mode: ${GEMINI_API_KEY ? "Gemini" : "Mock"}`);
 });
