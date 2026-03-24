@@ -2,6 +2,7 @@ console.log("🚀 NEW CODE DEPLOYED");
 
 const express = require("express");
 const axios = require("axios");
+const { searchFAQ } = require("./services/faqService");
 
 const app = express();
 app.use(express.json());
@@ -9,22 +10,28 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// ─── FAQ ──────────────────────────────────────────────────────────────────────
-const FAQ = `
-Q: What are your fees?
-A: KindSwap charges 0.5% per transaction with no hidden fees. International transfers have a flat fee of $2.
-`;
-
 // ─── Gemini Call ──────────────────────────────────────────────────────────────
 async function callGemini(message) {
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY");
   }
 
-  const prompt = `
-Answer ONLY using this FAQ:
+  // 🔥 STEP 1: Search relevant FAQs
+  const matchedFAQs = searchFAQ(message);
 
-${FAQ}
+  // 🔥 STEP 2: Build context
+  const context = matchedFAQs.length
+    ? matchedFAQs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")
+    : "No relevant FAQ found.";
+
+  const prompt = `
+You are an HR support chatbot.
+
+Answer ONLY using the FAQ below.
+If answer is not found, say politely you are not sure and suggest contacting HR.
+
+FAQ:
+${context}
 
 User: ${message}
 Answer:
@@ -47,7 +54,7 @@ Answer:
       }
     );
 
-    console.log("✅ GEMINI RESPONSE:", JSON.stringify(response.data, null, 2));
+    console.log("✅ GEMINI RESPONSE RECEIVED");
 
     const text =
       response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -59,8 +66,7 @@ Answer:
     return text;
 
   } catch (error) {
-    console.error("❌ FULL ERROR:", JSON.stringify(error?.response?.data, null, 2));
-    console.error("❌ MESSAGE:", error.message);
+    console.error("❌ Gemini Error:", error.message);
     throw error;
   }
 }
@@ -70,8 +76,11 @@ app.post("/api/salesiq/webhook", async (req, res) => {
   try {
     console.log("📥 RAW BODY:", JSON.stringify(req.body, null, 2));
 
-    // 🔥 Extract message correctly from Zoho
-    const message = req.body?.message?.text || "";
+    // 🔥 FIXED message extraction
+    const message =
+      req.body?.message?.text ||
+      req.body?.message ||
+      "";
 
     console.log("📩 Extracted message:", message);
 
