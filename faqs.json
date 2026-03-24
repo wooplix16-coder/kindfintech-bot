@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What is the casual leave policy?",
+    "answer": "Employees are entitled to 12 casual leaves per year, subject to manager approval."
+  },
+  {
+    "question": "What is sick leave policy?",
+    "answer": "Employees can take up to 10 sick leaves annually. Medical proof may be required for extended leave."
+  },
+  {
+    "question": "How many paid leaves do employees get?",
+    "answer": "Employees get a total of 22 paid leaves including casual and sick leaves."
+  },
+  {
+    "question": "What is the vacation policy?",
+    "answer": "Employees are eligible for 15 days of paid vacation annually after completing probation."
+  },
+  {
+    "question": "Are weekends off?",
+    "answer": "Yes, Saturdays and Sundays are standard weekly offs unless specified otherwise by the project."
+  },
+  {
+    "question": "What are the working hours?",
+    "answer": "Standard working hours are 9 hours per day including breaks."
+  },
+  {
+    "question": "What are the shift timings?",
+    "answer": "Shift timings vary by team: General shift is 9 AM to 6 PM, other shifts depend on project requirements."
+  },
+  {
+    "question": "Can I carry forward unused leaves?",
+    "answer": "Yes, up to 5 unused leaves can be carried forward to the next year."
+  },
+  {
+    "question": "Is work from home allowed?",
+    "answer": "Work from home is allowed based on manager approval and project requirements."
+  },
+  {
+    "question": "What is the policy for late coming?",
+    "answer": "Repeated late coming may lead to deduction of leave or disciplinary action."
+  }
+]
