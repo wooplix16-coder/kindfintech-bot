@@ -2,12 +2,12 @@ const axios = require("axios");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateAIReply({ message, memory, history }) {
+async function generateAIReply({ message, history, name, memory }) {
 
   const prompt = `
-You are an intelligent HR assistant.
+You are Kind Fintech HR Assistant.
 
-You have structured memory about the user.
+User Name: ${name || "Unknown"}
 
 Memory:
 ${JSON.stringify(memory)}
@@ -17,14 +17,14 @@ ${history.join("\n")}
 
 User: ${message}
 
-Instructions:
+Rules:
 - Use memory to answer logically
 - Perform calculations when needed
 - Example:
   total = 10, used = 3 → remaining = 7
-- Do NOT assume missing values
-- Be concise and natural
-- Avoid repetition
+- NEVER assume unknown values
+- Keep answers short and natural
+- Avoid repeating phrases
 
 Answer:
 `;
@@ -38,7 +38,7 @@ Answer:
     );
 
     return res.data?.candidates?.[0]?.content?.parts?.[0]?.text
-      || "I couldn’t process that.";
+      || "I couldn’t understand that.";
 
   } catch (err) {
     console.error("AI ERROR:", err.response?.data || err.message);
