@@ -1,71 +1,109 @@
-const express = require("express");
-const { searchFAQ } = require("./services/faqService");
-const { processMessage } = require("./services/aiService");
+const axios = require("axios");
 
-const app = express();
-app.use(express.json());
+const API_KEY = process.env.GEMINI_API_KEY;
 
-const sessions = {};
+// ✅ Gemini 2.5 Flash (CORRECT)
+const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
-function extractMessage(body) {
-  return (body?.message?.text || body?.message || "").trim();
-}
+async function processMessage({ message, memory, history, faqContext }) {
 
-function extractSessionId(body) {
-  return body?.visitor?.id || "default";
-}
+  const prompt = buildPrompt({ message, memory, history, faqContext });
 
-app.post("/api/salesiq/webhook", async (req, res) => {
-  const message = extractMessage(req.body);
-  const sessionId = extractSessionId(req.body);
-
-  if (!message) {
-    return res.json({
-      action: "reply",
-      replies: [{ type: "text", text: "I didn't catch that. Could you rephrase?" }]
-    });
-  }
-
-  if (!sessions[sessionId]) {
-    sessions[sessionId] = { memory: {}, history: [] };
-  }
-
-  const session = sessions[sessionId];
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.5,
+      maxOutputTokens: 500
+    }
+  };
 
   try {
-    // Get relevant FAQ context
-    const faqContext = searchFAQ(message);
+    const res = await retryCall(payload);
 
-    // Single AI call that handles everything
-    const { reply, memoryUpdates } = await processMessage({
-      message,
-      memory: session.memory,
-      history: session.history.slice(-8), // last 4 exchanges
-      faqContext
-    });
+    const raw = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Merge memory updates returned by AI
-    if (memoryUpdates && typeof memoryUpdates === "object") {
-      session.memory = { ...session.memory, ...memoryUpdates };
+    const parsed = safeParse(raw);
+
+    if (!parsed) {
+      return {
+        reply: raw || "I couldn't process that.",
+        memoryUpdates: {}
+      };
     }
 
-    // Store history as pairs
-    session.history.push({ role: "user", content: message });
-    session.history.push({ role: "assistant", content: reply });
-
-    return res.json({
-      action: "reply",
-      replies: [{ type: "text", text: reply }]
-    });
+    return parsed;
 
   } catch (err) {
-    console.error("WEBHOOK ERROR:", err.message);
-    return res.json({
-      action: "reply",
-      replies: [{ type: "text", text: "I'm having a moment. Please try again." }]
-    });
+    console.error("AI ERROR:", err.response?.data || err.message);
+    throw err;
   }
-});
+}
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 HR Bot running on port ${PORT}`));
+// =====================
+// PROMPT
+// =====================
+function buildPrompt({ message, memory, history, faqContext }) {
+  return `
+You are a smart HR assistant.
+
+MEMORY:
+${JSON.stringify(memory)}
+
+HISTORY:
+${history.map(h => `${h.role}: ${h.content}`).join("\n")}
+
+FAQ:
+${faqContext}
+
+RULES:
+- Use FAQ as source of truth
+- Never assume values
+- If user gives numbers → store & use
+- Do calculations when needed
+- If no data → say you don't know
+- Avoid repetition
+- No "How can I help you" spam
+
+RETURN JSON ONLY:
+{
+ "reply": "...",
+ "memoryUpdates": {}
+}
+
+User: ${message}
+`;
+}
+
+// =====================
+// SAFE JSON PARSE
+// =====================
+function safeParse(text) {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+// =====================
+// RETRY LOGIC
+// =====================
+async function retryCall(payload, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.post(URL, payload);
+    } catch (err) {
+      if (err.response?.status === 429 && i < retries - 1) {
+        console.log("⏳ Retry...");
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2;
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+module.exports = { processMessage };
