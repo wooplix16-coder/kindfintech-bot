@@ -7,14 +7,8 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// =====================
-// SESSION MEMORY
-// =====================
 const sessions = {};
 
-// =====================
-// HELPERS
-// =====================
 function extractMessage(body) {
   return (body?.message?.text || body?.message || "").trim();
 }
@@ -23,19 +17,16 @@ function extractSessionId(body) {
   return body?.visitor?.id || "default";
 }
 
-// =====================
-// WEBHOOK
-// =====================
 app.post("/api/salesiq/webhook", async (req, res) => {
   const message = extractMessage(req.body);
   const sessionId = extractSessionId(req.body);
 
-  console.log("📩 Incoming:", message);
+  console.log("📩 USER:", message);
 
   if (!message) {
     return res.json({
       action: "reply",
-      replies: [{ type: "text", text: "I didn’t catch that. Can you rephrase?" }]
+      replies: [{ type: "text", text: "Please type something." }]
     });
   }
 
@@ -48,7 +39,6 @@ app.post("/api/salesiq/webhook", async (req, res) => {
   }
 
   const session = sessions[sessionId];
-  session.lastActive = Date.now();
 
   try {
     const faqContext = searchFAQ(message);
@@ -61,23 +51,23 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     });
 
     // =====================
-    // SAFE MEMORY MERGE
+    // INTELLIGENT MEMORY MERGE
     // =====================
     if (memoryUpdates) {
       for (const key in memoryUpdates) {
-        if (
-          typeof memoryUpdates[key] === "number" &&
-          typeof session.memory[key] === "number"
-        ) {
-          session.memory[key] += memoryUpdates[key];
+
+        if (typeof memoryUpdates[key] === "number") {
+          // accumulate only for numeric fields
+          session.memory[key] = (session.memory[key] || 0) + memoryUpdates[key];
         } else {
           session.memory[key] = memoryUpdates[key];
         }
+
       }
     }
 
-    console.log("🧠 Memory:", session.memory);
-    console.log("🤖 Reply:", reply);
+    console.log("🧠 MEMORY:", session.memory);
+    console.log("🤖 REPLY:", reply);
 
     session.history.push({ role: "user", content: message });
     session.history.push({ role: "assistant", content: reply });
@@ -92,21 +82,9 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
     return res.json({
       action: "reply",
-      replies: [{ type: "text", text: "I’m having trouble right now." }]
+      replies: [{ type: "text", text: "Something went wrong." }]
     });
   }
 });
-
-// =====================
-// CLEANUP MEMORY
-// =====================
-setInterval(() => {
-  const now = Date.now();
-  for (const id in sessions) {
-    if (now - sessions[id].lastActive > 2 * 60 * 60 * 1000) {
-      delete sessions[id];
-    }
-  }
-}, 30 * 60 * 1000);
 
 app.listen(PORT, () => console.log("🚀 Server running"));
