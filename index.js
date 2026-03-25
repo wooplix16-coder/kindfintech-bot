@@ -10,6 +10,9 @@ const sessions = {};
 
 app.post("/api/salesiq/webhook", async (req, res) => {
   try {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📥 NEW REQUEST:", JSON.stringify(req.body));
+
     const message =
       req.body?.message?.text ||
       req.body?.message ||
@@ -20,85 +23,66 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     if (!sessions[sessionId]) {
       sessions[sessionId] = {
         history: [],
-        greeted: false,
-        failureCount: 0
+        greeted: false
       };
+      console.log("🆕 New session:", sessionId);
     }
 
     const session = sessions[sessionId];
 
-    console.log("📩", message);
+    console.log("💬 USER MESSAGE:", message);
 
-    // ✅ FIRST GREETING
+    // FIRST GREETING
     if (!session.greeted) {
       session.greeted = true;
+
+      console.log("👋 Sending first greeting");
 
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "Hello 👋 Welcome! I’m Kind Fintech Bot.\nI can help you with HR topics like leave, salary, and policies.\n\nHow can I assist you today?"
+          text: "Hello 👋 I’m Kind Fintech Bot. How can I help you today?"
         }]
       });
     }
 
-    // ✅ EMPTY MESSAGE
     if (!message || message.trim() === "") {
+      console.log("⚠️ Empty message");
       return res.json({ action: "reply", replies: [] });
     }
 
     const intent = detectIntent(message);
 
-    // ✅ GREETING
-    if (intent === "greeting") {
-      return res.json({
-        action: "reply",
-        replies: [{
-          type: "text",
-          text: "Hi 👋 How can I help you today?"
-        }]
-      });
-    }
-
-    // ✅ IDENTITY
+    // IDENTITY
     if (intent === "identity") {
+      console.log("👤 Identity response");
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "I’m Kind Fintech Bot 🤖 I help you with HR policies like leave, salary, and working hours."
+          text: "I’m Kind Fintech Bot 🤖 I help with HR policies."
         }]
       });
     }
 
-    // ✅ CAPABILITY
-    if (intent === "capability") {
+    // GREETING
+    if (intent === "greeting") {
+      console.log("👋 Greeting response");
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "I can help you with HR topics like leave policies, working hours, salary, and more. What would you like to know?"
+          text: "Hi 👋 How can I help you?"
         }]
       });
     }
 
-    // 🔍 FAQ SEARCH
+    // FAQ SEARCH
     const matchedFAQs = searchFAQ(message);
 
-    // 🚫 NO MATCH (fallback)
-    if (matchedFAQs.length === 0 && intent === "policy") {
-      session.failureCount++;
+    console.log("📊 Matched FAQs:", matchedFAQs.length);
 
-      return res.json({
-        action: "reply",
-        replies: [{
-          type: "text",
-          text: "I’m not fully sure about that 🤔 but I can help with HR topics like leave, salary, and working hours."
-        }]
-      });
-    }
-
-    // 🤖 AI RESPONSE
     const reply = await generateReply({
       message,
       contextFAQs: matchedFAQs,
@@ -109,10 +93,6 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     session.history.push(`User: ${message}`);
     session.history.push(`Bot: ${reply}`);
 
-    if (session.history.length > 10) {
-      session.history.shift();
-    }
-
     return res.json({
       action: "reply",
       replies: [{
@@ -122,16 +102,16 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("🔥 FINAL ERROR:", err);
 
     return res.json({
       action: "reply",
       replies: [{
         type: "text",
-        text: "Something went wrong. Please try again."
+        text: "Critical error occurred."
       }]
     });
   }
 });
 
-app.listen(3000, () => console.log("🚀 Server running"));
+app.listen(3000, () => console.log("🚀 DEBUG SERVER RUNNING"));
