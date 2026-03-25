@@ -2,25 +2,29 @@ const axios = require("axios");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateAIReply({ message, history, name }) {
+async function generateAIReply({ message, memory, history }) {
 
   const prompt = `
-You are Kind Fintech HR Assistant.
+You are an intelligent HR assistant.
 
-Rules:
-- Be natural, not robotic
-- Do NOT repeat greetings unnecessarily
-- If name exists, use it naturally
-- Keep answers short (2-3 lines)
-- For HR topics → general guidance only
-- Do NOT assume personal data
+You have structured memory about the user.
 
-User Name: ${name || "Unknown"}
+Memory:
+${JSON.stringify(memory)}
 
 Conversation:
 ${history.join("\n")}
 
 User: ${message}
+
+Instructions:
+- Use memory to answer logically
+- Perform calculations when needed
+- Example:
+  total = 10, used = 3 → remaining = 7
+- Do NOT assume missing values
+- Be concise and natural
+- Avoid repetition
 
 Answer:
 `;
@@ -34,7 +38,7 @@ Answer:
     );
 
     return res.data?.candidates?.[0]?.content?.parts?.[0]?.text
-      || "I couldn't understand that.";
+      || "I couldn’t process that.";
 
   } catch (err) {
     console.error("AI ERROR:", err.response?.data || err.message);
