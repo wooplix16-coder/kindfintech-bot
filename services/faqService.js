@@ -1,14 +1,16 @@
-const Fuse = require("fuse.js");
 const faqs = require("../faqs.json");
 
-const fuse = new Fuse(faqs, {
-  keys: ["question"],
-  threshold: 0.4
-});
+// 🔍 Better matching than your old weak logic
+function searchFAQ(message) {
+  const msg = message.toLowerCase();
 
-function searchFAQ(query) {
-  const results = fuse.search(query);
-  return results.slice(0, 3).map(r => r.item);
+  return faqs.filter(faq => {
+    const question = faq.question.toLowerCase();
+
+    // basic keyword match
+    return question.includes(msg) ||
+      msg.split(" ").some(word => question.includes(word));
+  });
 }
 
 module.exports = { searchFAQ };
