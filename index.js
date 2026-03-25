@@ -1,38 +1,21 @@
 const express = require("express");
 const { searchFAQ } = require("./services/faqService");
-const { detectIntent } = require("./services/intentService");
 const { generateAIReply } = require("./services/aiService");
-const { extractStructuredData } = require("./services/memoryService");
+const { extractFactsAI } = require("./services/memoryService");
 
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
-
-// =====================
-// SESSION STORE
-// =====================
 const sessions = {};
 
-// =====================
-// HELPERS
-// =====================
 function extractMessage(body) {
-  return (
-    body?.message?.text ||
-    body?.data?.message ||
-    body?.message ||
-    ""
-  );
+  return body?.message?.text || body?.message || "";
 }
 
 function extractSessionId(body) {
   return body?.visitor?.id || "default";
 }
 
-// =====================
-// WEBHOOK
-// =====================
 app.post("/api/salesiq/webhook", async (req, res) => {
 
   const message = extractMessage(req.body);
@@ -40,8 +23,7 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
   if (!sessions[sessionId]) {
     sessions[sessionId] = {
-      name: null,
-      memory: {}, // 🔥 NEW
+      memory: {},
       history: [],
       greeted: false
     };
@@ -53,17 +35,8 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
   try {
 
-    // =====================
-    // EMPTY
-    // =====================
-    if (!message || message.trim() === "") {
-      reply = "Hello 👋";
-    }
-
-    // =====================
     // FIRST GREETING
-    // =====================
-    else if (!session.greeted) {
+    if (!session.greeted) {
       session.greeted = true;
       reply = "Hello 👋 I’m Kind Fintech Bot.";
     }
@@ -71,80 +44,49 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     else {
 
       // =====================
-      // EXTRACT STRUCTURED DATA
+      // AI FACT EXTRACTION
       // =====================
-      const data = extractStructuredData(message);
+      const facts = await extractFactsAI(message, session.memory);
 
-      // Store name
-      if (data.name) {
-        session.name = data.name;
-        reply = `Got it, ${data.name}.`;
+      // MERGE MEMORY
+      if (facts.name) {
+        session.memory.name = facts.name;
+      }
+
+      if (facts.topic && facts.value !== undefined) {
+        if (!session.memory[facts.topic]) {
+          session.memory[facts.topic] = {};
+        }
+
+        session.memory[facts.topic][facts.type || "value"] = facts.value;
       }
 
       // =====================
-      // STORE GENERIC MEMORY
+      // FAQ CONTEXT (NOT CONTROL)
       // =====================
-      else {
+      const faqs = searchFAQ(message);
 
-        if (data.topic && data.value !== undefined) {
+      const faqContext = faqs.length
+        ? faqs.map(f => `Q:${f.question} A:${f.answer}`).join("\n")
+        : "None";
 
-          if (!session.memory[data.topic]) {
-            session.memory[data.topic] = {};
-          }
-
-          session.memory[data.topic][data.type || "value"] = data.value;
-        }
-
-        // =====================
-        // NAME RECALL
-        // =====================
-        if (message.toLowerCase().includes("my name")) {
-          reply = session.name
-            ? `Your name is ${session.name}.`
-            : "You haven’t told me your name yet.";
-        }
-
-        else {
-
-          // =====================
-          // FAQ PRIORITY
-          // =====================
-          const faqs = searchFAQ(message);
-
-          if (faqs.length > 0) {
-
-            let answer = faqs[0].answer;
-
-            answer = answer
-              .replace("you have", "employees receive")
-              .replace("you get", "employees get");
-
-            reply = answer;
-          }
-
-          // =====================
-          // AI REASONING
-          // =====================
-          else {
-            reply = await generateAIReply({
-              message,
-              history: session.history.slice(-5),
-              name: session.name,
-              memory: session.memory
-            });
-          }
-        }
-      }
+      // =====================
+      // AI RESPONSE
+      // =====================
+      reply = await generateAIReply({
+        message,
+        memory: session.memory,
+        history: session.history.slice(-5),
+        faqContext
+      });
     }
 
-    // =====================
     // SAVE HISTORY
-    // =====================
     session.history.push(`User: ${message}`);
     session.history.push(`Bot: ${reply}`);
 
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err);
     reply = "Something went wrong.";
   }
 
@@ -154,4 +96,4 @@ app.post("/api/salesiq/webhook", async (req, res) => {
   });
 });
 
-app.listen(PORT, () => console.log("🚀 AI Assistant Running"));
+app.listen(3000, () => console.log("🚀 Fully AI Dynamic System"));
