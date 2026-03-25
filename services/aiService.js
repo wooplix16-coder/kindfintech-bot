@@ -1,55 +1,109 @@
 const axios = require("axios");
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateAIReply({ message, memory, history, faqContext }) {
+// ✅ Gemini 2.5 Flash (CORRECT)
+const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
-  const prompt = `
-You are a smart HR assistant.
+async function processMessage({ message, memory, history, faqContext }) {
 
-You must:
-- understand context
-- use memory
-- reason dynamically
-- calculate values if needed
+  const prompt = buildPrompt({ message, memory, history, faqContext });
 
-Memory:
-${JSON.stringify(memory)}
-
-Conversation:
-${history.join("\n")}
-
-FAQ (for reference only):
-${faqContext}
-
-User: ${message}
-
-Rules:
-- Use memory for calculations
-- If user gave values → use them
-- If total exists → calculate remaining
-- If missing data → say you don't know
-- Be natural
-- Avoid repetition
-
-Answer:
-`;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.5,
+      maxOutputTokens: 500
+    }
+  };
 
   try {
-    const res = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        contents: [{ parts: [{ text: prompt }] }]
-      }
-    );
+    const res = await retryCall(payload);
 
-    return res.data?.candidates?.[0]?.content?.parts?.[0]?.text
-      || "I couldn’t understand that.";
+    const raw = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    const parsed = safeParse(raw);
+
+    if (!parsed) {
+      return {
+        reply: raw || "I couldn't process that.",
+        memoryUpdates: {}
+      };
+    }
+
+    return parsed;
 
   } catch (err) {
-    console.error("AI ERROR:", err.message);
-    return "I’m having trouble responding right now.";
+    console.error("AI ERROR:", err.response?.data || err.message);
+    throw err;
   }
 }
 
-module.exports = { generateAIReply };
+// =====================
+// PROMPT
+// =====================
+function buildPrompt({ message, memory, history, faqContext }) {
+  return `
+You are a smart HR assistant.
+
+MEMORY:
+${JSON.stringify(memory)}
+
+HISTORY:
+${history.map(h => `${h.role}: ${h.content}`).join("\n")}
+
+FAQ:
+${faqContext}
+
+RULES:
+- Use FAQ as source of truth
+- Never assume values
+- If user gives numbers → store & use
+- Do calculations when needed
+- If no data → say you don't know
+- Avoid repetition
+- No "How can I help you" spam
+
+RETURN JSON ONLY:
+{
+ "reply": "...",
+ "memoryUpdates": {}
+}
+
+User: ${message}
+`;
+}
+
+// =====================
+// SAFE JSON PARSE
+// =====================
+function safeParse(text) {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+// =====================
+// RETRY LOGIC
+// =====================
+async function retryCall(payload, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.post(URL, payload);
+    } catch (err) {
+      if (err.response?.status === 429 && i < retries - 1) {
+        console.log("⏳ Retry...");
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2;
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+module.exports = { processMessage };
