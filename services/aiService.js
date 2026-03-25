@@ -2,33 +2,41 @@ const axios = require("axios");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateReply({ message, contextFAQs, history }) {
+async function generateReply({ message, contextFAQs, history, intent }) {
 
-  // 🚫 HARD FALLBACK (no FAQ → no AI hallucination)
-  if (!contextFAQs.length) {
+  // 🚫 HARD FALLBACK (no FAQ for policy)
+  if (intent === "policy" && contextFAQs.length === 0) {
     return "I’m not fully sure about that 🤔 but I can help with HR topics like leave, salary, and working hours.";
   }
 
-  const faqContext = contextFAQs
-    .map(f => `Q: ${f.question}\nA: ${f.answer}`)
-    .join("\n\n");
+  const faqContext = contextFAQs.length
+    ? contextFAQs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")
+    : "No FAQ available";
 
   const historyText = history.join("\n");
 
   const prompt = `
-You are a smart and professional HR assistant chatbot.
+You are a smart HR assistant chatbot.
 
-Follow this priority strictly:
+Understand the user's intent carefully.
 
-STEP 1: If greeting → respond warmly
-STEP 2: If HR-related → answer using FAQ context naturally
-STEP 3: If partial → combine FAQ + understanding
-STEP 4: If not HR → politely redirect to HR topics
+INTENT TYPES:
 
-STRICT RULES:
-- Do NOT make up policies
+1. Greeting → respond warmly
+2. Identity → introduce yourself as Kind Fintech Bot
+3. Capability → explain what you can do
+4. Definition → explain concept clearly (e.g., "What is sick leave?")
+5. Policy → give exact company rule from FAQ
+6. Unknown → politely guide to HR topics
+
+IMPORTANT RULES:
+
+- Definition ≠ Policy (DO NOT confuse)
+- "What is X" = explanation
+- "How many / policy" = exact rule
+- Use FAQ only for company-specific answers
 - Keep answers short (2–4 lines)
-- Be natural and human-like
+- Do NOT hallucinate
 
 FAQ Context:
 ${faqContext}
@@ -36,7 +44,8 @@ ${faqContext}
 Conversation History:
 ${historyText}
 
-User: ${message}
+User Intent: ${intent}
+User Message: ${message}
 
 Answer:
 `;
@@ -50,7 +59,7 @@ Answer:
     );
 
     return res.data?.candidates?.[0]?.content?.parts?.[0]?.text
-      || "Sorry, I couldn’t understand that properly.";
+      || "Sorry, I couldn’t understand that.";
 
   } catch (err) {
     console.error("AI ERROR:", err.message);
