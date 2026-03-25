@@ -10,8 +10,7 @@ const sessions = {};
 
 app.post("/api/salesiq/webhook", async (req, res) => {
   try {
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📥 NEW REQUEST:", JSON.stringify(req.body));
+    console.log("━━━━━━━━━━━━━━━━━━━");
 
     const message =
       req.body?.message?.text ||
@@ -21,54 +20,49 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     const sessionId = req.body?.session_id || "default";
 
     if (!sessions[sessionId]) {
-      sessions[sessionId] = {
-        history: [],
-        greeted: false
-      };
-      console.log("🆕 New session:", sessionId);
+      sessions[sessionId] = { greeted: false };
     }
 
     const session = sessions[sessionId];
 
-    console.log("💬 USER MESSAGE:", message);
+    console.log("💬 USER:", message);
 
-    // FIRST GREETING
+    // ✅ ALWAYS FIRST GREETING
     if (!session.greeted) {
       session.greeted = true;
 
-      console.log("👋 Sending first greeting");
+      console.log("👋 FIRST GREETING");
 
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "Hello 👋 I’m Kind Fintech Bot. How can I help you today?"
+          text: "Hello 👋 I’m Kind Fintech Bot.\nHow can I help you today?"
         }]
       });
     }
 
     if (!message || message.trim() === "") {
-      console.log("⚠️ Empty message");
       return res.json({ action: "reply", replies: [] });
     }
 
     const intent = detectIntent(message);
 
-    // IDENTITY
+    console.log("🧠 INTENT:", intent);
+
+    // ✅ IDENTITY
     if (intent === "identity") {
-      console.log("👤 Identity response");
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "I’m Kind Fintech Bot 🤖 I help with HR policies."
+          text: "I’m Kind Fintech Bot 🤖 I help with HR policies and queries."
         }]
       });
     }
 
-    // GREETING
+    // ✅ GREETING
     if (intent === "greeting") {
-      console.log("👋 Greeting response");
       return res.json({
         action: "reply",
         replies: [{
@@ -78,20 +72,13 @@ app.post("/api/salesiq/webhook", async (req, res) => {
       });
     }
 
-    // FAQ SEARCH
     const matchedFAQs = searchFAQ(message);
-
-    console.log("📊 Matched FAQs:", matchedFAQs.length);
 
     const reply = await generateReply({
       message,
       contextFAQs: matchedFAQs,
-      history: session.history,
       intent
     });
-
-    session.history.push(`User: ${message}`);
-    session.history.push(`Bot: ${reply}`);
 
     return res.json({
       action: "reply",
@@ -102,16 +89,16 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("🔥 FINAL ERROR:", err);
+    console.error("🔥 ERROR:", err);
 
     return res.json({
       action: "reply",
       replies: [{
         type: "text",
-        text: "Critical error occurred."
+        text: "Something went wrong."
       }]
     });
   }
 });
 
-app.listen(3000, () => console.log("🚀 DEBUG SERVER RUNNING"));
+app.listen(3000, () => console.log("🚀 Server running"));
