@@ -6,9 +6,7 @@ function searchFAQ(message) {
   const results = faqs.map(faq => {
     let score = 0;
 
-    const words = msg.split(" ");
-
-    words.forEach(word => {
+    msg.split(" ").forEach(word => {
       if (faq.question.toLowerCase().includes(word)) {
         score++;
       }
@@ -17,10 +15,19 @@ function searchFAQ(message) {
     return { ...faq, score };
   });
 
-  return results
-    .filter(f => f.score >= 2) // 🔥 threshold
+  const filtered = results
+    .filter(f => f.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
+
+  if (process.env.DEBUG === "true") {
+    console.log("📊 FAQ MATCH RESULTS:");
+    filtered.forEach(f =>
+      console.log(`→ ${f.question} | score=${f.score}`)
+    );
+  }
+
+  return filtered;
 }
 
 module.exports = { searchFAQ };
