@@ -1,4 +1,4 @@
-console.log("🚀 NEW CODE DEPLOYED");
+console.log("🚀 BOT SERVER STARTED");
 
 const express = require("express");
 const axios = require("axios");
@@ -10,25 +10,44 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// ─── Gemini Call ──────────────────────────────────────────────────────────────
+// 🧠 Session store (replace with Redis later)
+const sessions = {};
+
+// ─────────────────────────────────────────
+// 👋 Greeting detection
+// ─────────────────────────────────────────
+function isGreeting(message) {
+  const greetings = [
+    "hi", "hello", "hey",
+    "good morning", "good afternoon", "good evening"
+  ];
+
+  return greetings.some(g =>
+    message.toLowerCase().includes(g)
+  );
+}
+
+// ─────────────────────────────────────────
+// 🤖 Gemini call
+// ─────────────────────────────────────────
 async function callGemini(message) {
   if (!GEMINI_API_KEY) {
-    throw new Error("Missing GEMINI_API_KEY");
+    return "AI not configured.";
   }
 
-  // 🔥 STEP 1: Search relevant FAQs
   const matchedFAQs = searchFAQ(message);
 
-  // 🔥 STEP 2: Build context
   const context = matchedFAQs.length
     ? matchedFAQs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")
     : "No relevant FAQ found.";
 
   const prompt = `
-You are an HR support chatbot.
+You are an HR chatbot.
 
-Answer ONLY using the FAQ below.
-If answer is not found, say politely you are not sure and suggest contacting HR.
+Rules:
+1. If greeting → respond politely
+2. Answer ONLY from FAQ
+3. If not found → say you are not sure and suggest contacting HR
 
 FAQ:
 ${context}
@@ -41,106 +60,97 @@ Answer:
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ]
-      },
-      {
-        headers: {
-          "Content-Type": "application/json"
-        }
+        contents: [{ parts: [{ text: prompt }] }]
       }
     );
 
-    console.log("✅ GEMINI RESPONSE RECEIVED");
+    return response.data?.candidates?.[0]?.content?.parts?.[0]?.text
+      || "Sorry, I couldn’t understand.";
 
-    const text =
-      response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      throw new Error("Empty Gemini response");
-    }
-
-    return text;
-
-  } catch (error) {
-    console.error("❌ Gemini Error:", error.message);
-    throw error;
+  } catch (err) {
+    console.error("❌ Gemini Error:", err.message);
+    return "Error processing request.";
   }
 }
 
-// ─── Zoho Webhook ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────
+// 🌐 Webhook
+// ─────────────────────────────────────────
 app.post("/api/salesiq/webhook", async (req, res) => {
   try {
-    console.log("📥 RAW BODY:", JSON.stringify(req.body, null, 2));
-
-    // 🔥 FIXED message extraction
     const message =
       req.body?.message?.text ||
       req.body?.message ||
       "";
 
-    console.log("📩 Extracted message:", message);
+    const sessionId = req.body?.session_id || "default";
 
-    if (!message) {
+    if (!sessions[sessionId]) {
+      sessions[sessionId] = { isFirstMessage: true };
+    }
+
+    const session = sessions[sessionId];
+
+    console.log("📩", message);
+
+    // ✅ First message logic
+    if (session.isFirstMessage) {
+      session.isFirstMessage = false;
+
+      if (isGreeting(message)) {
+        return res.json({
+          action: "reply",
+          replies: [{
+            type: "text",
+            text: "Hello 👋 How can I help you today?"
+          }]
+        });
+      }
+    }
+
+    // ✅ Greeting anytime
+    if (isGreeting(message)) {
       return res.json({
         action: "reply",
-        replies: [
-          {
-            type: "text",
-            text: "No message received."
-          }
-        ]
+        replies: [{
+          type: "text",
+          text: "Hi 👋 What can I do for you?"
+        }]
       });
     }
 
+    // ✅ AI response
     const reply = await callGemini(message);
 
     return res.json({
       action: "reply",
-      replies: [
-        {
-          type: "text",
-          text: reply
-        }
-      ]
+      replies: [{
+        type: "text",
+        text: reply
+      }]
     });
 
   } catch (error) {
-    console.error("🔥 FINAL ERROR:", error.message);
+    console.error("🔥 ERROR:", error.message);
 
     return res.json({
       action: "reply",
-      replies: [
-        {
-          type: "text",
-          text: "Something went wrong. Connecting to human."
-        }
-      ]
+      replies: [{
+        type: "text",
+        text: "Something went wrong. Connecting to human agent."
+      }]
     });
   }
 });
 
-// ─── Health Check ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────
+// Health
+// ─────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    ai: GEMINI_API_KEY ? "Gemini connected" : "Missing key"
-  });
+  res.json({ status: "OK" });
 });
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
-app.get("/", (req, res) => {
-  res.json({
-    message: "KindFintech Bot is running",
-    status: "OK"
-  });
-});
-
-// ─── Start Server ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🤖 AI Mode: ${GEMINI_API_KEY ? "Gemini" : "Mock"}`);
+  console.log(`🚀 Running on ${PORT}`);
 });
