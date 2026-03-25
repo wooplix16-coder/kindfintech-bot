@@ -17,46 +17,79 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
     const sessionId = req.body?.session_id || "default";
 
+    // 🧠 INIT SESSION
     if (!sessions[sessionId]) {
       sessions[sessionId] = {
         history: [],
-        isFirst: true
+        greeted: false,
+        failureCount: 0
       };
     }
 
     const session = sessions[sessionId];
 
-    // 🧠 Save history
-    session.history.push(`User: ${message}`);
-    if (session.history.length > 10) session.history.shift();
+    console.log("📩", message);
 
-    // ─── INTENT DETECTION ─────────────────────
-    const intent = detectIntent(message);
-
-    // ─── GREETING ─────────────────────────────
-    if (intent === "greeting" && session.isFirst) {
-      session.isFirst = false;
+    // ✅ FIRST GREETING
+    if (!session.greeted) {
+      session.greeted = true;
 
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "Hello 👋 How can I help you today?"
+          text: "Hello 👋 Welcome! I can help you with HR topics like leave, salary, and policies.\n\nHow can I assist you today?"
         }]
       });
     }
 
-    // ─── FAQ SEARCH ───────────────────────────
+    // ✅ EMPTY MESSAGE
+    if (!message || message.trim() === "") {
+      return res.json({ action: "reply", replies: [] });
+    }
+
+    const intent = detectIntent(message);
+
+    // ✅ GREETING AFTER FIRST
+    if (intent === "greeting") {
+      return res.json({
+        action: "reply",
+        replies: [{
+          type: "text",
+          text: "Hi 👋 What can I help you with?"
+        }]
+      });
+    }
+
+    // 🔍 FAQ MATCH
     const matchedFAQs = searchFAQ(message);
 
-    // ─── AI RESPONSE ──────────────────────────
+    // 🚫 NO MATCH → FALLBACK
+    if (matchedFAQs.length === 0) {
+      session.failureCount++;
+
+      return res.json({
+        action: "reply",
+        replies: [{
+          type: "text",
+          text: "I’m not fully sure about that 🤔 but I can help with HR topics like leave, salary, and working hours."
+        }]
+      });
+    }
+
+    // 🤖 AI RESPONSE
     const reply = await generateReply({
       message,
       contextFAQs: matchedFAQs,
       history: session.history
     });
 
+    session.history.push(`User: ${message}`);
     session.history.push(`Bot: ${reply}`);
+
+    if (session.history.length > 10) {
+      session.history.shift();
+    }
 
     return res.json({
       action: "reply",
@@ -73,10 +106,10 @@ app.post("/api/salesiq/webhook", async (req, res) => {
       action: "reply",
       replies: [{
         type: "text",
-        text: "Something went wrong. Connecting to human."
+        text: "Something went wrong. Please try again."
       }]
     });
   }
 });
 
-app.listen(3000, () => console.log("🚀 Running"));
+app.listen(3000, () => console.log("🚀 Server running"));
