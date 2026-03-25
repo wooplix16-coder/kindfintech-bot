@@ -1,42 +1,200 @@
 [
   {
+    "question": "What is casual leave?",
+    "answer": "Casual leave is short-term leave employees can take for personal reasons, usually without prior planning."
+  },
+  {
     "question": "What is the casual leave policy?",
     "answer": "Employees are entitled to 12 casual leaves per year, subject to manager approval."
   },
   {
-    "question": "What is sick leave policy?",
-    "answer": "Employees can take up to 10 sick leaves annually. Medical proof may be required for extended leave."
+    "question": "How many casual leaves do we get?",
+    "answer": "Employees receive 12 casual leaves annually."
+  },
+  {
+    "question": "Can casual leave be carried forward?",
+    "answer": "Casual leave cannot be carried forward and must be used within the year."
+  },
+  {
+    "question": "What is sick leave?",
+    "answer": "Sick leave is leave taken when an employee is unwell or needs medical rest."
+  },
+  {
+    "question": "What is the sick leave policy?",
+    "answer": "Employees can take up to 10 sick leaves annually, with medical proof required for extended leave."
+  },
+  {
+    "question": "How many sick leaves are allowed?",
+    "answer": "Employees are allowed 10 sick leaves per year."
+  },
+  {
+    "question": "Is medical certificate required for sick leave?",
+    "answer": "Yes, medical proof may be required for extended sick leave."
+  },
+  {
+    "question": "What is paid leave?",
+    "answer": "Paid leave allows employees to take time off while still receiving their salary."
   },
   {
     "question": "How many paid leaves do employees get?",
-    "answer": "Employees get a total of 22 paid leaves including casual and sick leaves."
+    "answer": "Employees get 22 paid leaves including casual and sick leaves."
   },
+
   {
-    "question": "What is the vacation policy?",
-    "answer": "Employees are eligible for 15 days of paid vacation annually after completing probation."
-  },
-  {
-    "question": "Are weekends off?",
-    "answer": "Yes, Saturdays and Sundays are standard weekly offs unless specified otherwise by the project."
-  },
-  {
-    "question": "What are the working hours?",
+    "question": "What are working hours?",
     "answer": "Standard working hours are 9 hours per day including breaks."
   },
   {
-    "question": "What are the shift timings?",
-    "answer": "Shift timings vary by team: General shift is 9 AM to 6 PM, other shifts depend on project requirements."
+    "question": "What is office timing?",
+    "answer": "Office timing is typically 9 AM to 6 PM unless specified otherwise."
   },
   {
-    "question": "Can I carry forward unused leaves?",
-    "answer": "Yes, up to 5 unused leaves can be carried forward to the next year."
+    "question": "Are weekends off?",
+    "answer": "Yes, Saturdays and Sundays are standard weekly offs."
   },
+  {
+    "question": "Do we work on weekends?",
+    "answer": "Weekends are usually off unless required by project needs."
+  },
+  {
+    "question": "What are shift timings?",
+    "answer": "Shift timings vary by team and project requirements."
+  },
+
   {
     "question": "Is work from home allowed?",
-    "answer": "Work from home is allowed based on manager approval and project requirements."
+    "answer": "Work from home is allowed based on manager approval."
   },
   {
-    "question": "What is the policy for late coming?",
-    "answer": "Repeated late coming may lead to deduction of leave or disciplinary action."
+    "question": "Can I work remotely?",
+    "answer": "Remote work depends on project requirements and manager approval."
+  },
+  {
+    "question": "What is hybrid work policy?",
+    "answer": "Hybrid work allows a mix of office and remote work depending on team guidelines."
+  },
+
+  {
+    "question": "What happens if I come late?",
+    "answer": "Repeated late coming may lead to leave deduction or disciplinary action."
+  },
+  {
+    "question": "What is late coming policy?",
+    "answer": "Frequent late arrivals can result in warnings or leave deductions."
+  },
+
+  {
+    "question": "What is probation period?",
+    "answer": "Probation is an initial period where employee performance is evaluated."
+  },
+  {
+    "question": "How long is probation?",
+    "answer": "Probation period is typically 3 to 6 months depending on role."
+  },
+  {
+    "question": "What happens after probation?",
+    "answer": "After successful probation, employees become confirmed members of the organization."
+  },
+
+  {
+    "question": "What is notice period?",
+    "answer": "Notice period is the time an employee must serve before leaving the company."
+  },
+  {
+    "question": "How long is notice period?",
+    "answer": "Notice period is typically 30 to 90 days depending on role."
+  },
+  {
+    "question": "Can notice period be reduced?",
+    "answer": "Notice period reduction depends on manager and HR approval."
+  },
+
+  {
+    "question": "What is salary cycle?",
+    "answer": "Salary is usually processed monthly as per company payroll cycle."
+  },
+  {
+    "question": "When is salary credited?",
+    "answer": "Salary is credited at the end of each month."
+  },
+  {
+    "question": "How is salary calculated?",
+    "answer": "Salary includes basic pay, allowances, and deductions as per company policy."
+  },
+
+  {
+    "question": "What is leave approval process?",
+    "answer": "Leave must be applied through system and approved by reporting manager."
+  },
+  {
+    "question": "How do I apply for leave?",
+    "answer": "Leave can be applied through the HR portal or internal system."
+  },
+  {
+    "question": "Can leave be rejected?",
+    "answer": "Yes, leave can be rejected based on business requirements."
+  },
+
+  {
+    "question": "What is holiday policy?",
+    "answer": "Employees are entitled to public holidays as per company calendar."
+  },
+  {
+    "question": "How many holidays are there?",
+    "answer": "Holidays vary each year as per official company calendar."
+  },
+
+  {
+    "question": "What is performance review?",
+    "answer": "Performance review evaluates employee work periodically."
+  },
+  {
+    "question": "How often are appraisals done?",
+    "answer": "Appraisals are typically conducted annually."
+  },
+
+  {
+    "question": "What is HR contact?",
+    "answer": "HR team can be contacted via official email or HR portal."
+  },
+  {
+    "question": "How to contact HR?",
+    "answer": "You can reach HR via email or internal communication tools."
+  },
+
+  {
+    "question": "What is company policy?",
+    "answer": "Company policy defines rules, guidelines, and procedures employees must follow."
+  },
+  {
+    "question": "Where can I find policies?",
+    "answer": "Policies are available in HR portal or employee handbook."
+  },
+
+  {
+    "question": "What is attendance policy?",
+    "answer": "Employees must maintain regular attendance and adhere to working hours."
+  },
+  {
+    "question": "How is attendance tracked?",
+    "answer": "Attendance is tracked using biometric or online systems."
+  },
+
+  {
+    "question": "What is overtime policy?",
+    "answer": "Overtime is compensated based on company policy and manager approval."
+  },
+  {
+    "question": "Do we get paid for overtime?",
+    "answer": "Yes, overtime compensation depends on company rules."
+  },
+
+  {
+    "question": "What is resignation process?",
+    "answer": "Employees must submit resignation through official system and serve notice period."
+  },
+  {
+    "question": "How do I resign?",
+    "answer": "Resignation can be submitted through HR system or email."
   }
 ]
