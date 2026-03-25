@@ -17,7 +17,6 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
     const sessionId = req.body?.session_id || "default";
 
-    // 🧠 INIT SESSION
     if (!sessions[sessionId]) {
       sessions[sessionId] = {
         history: [],
@@ -38,7 +37,7 @@ app.post("/api/salesiq/webhook", async (req, res) => {
         action: "reply",
         replies: [{
           type: "text",
-          text: "Hello 👋 Welcome! I can help you with HR topics like leave, salary, and policies.\n\nHow can I assist you today?"
+          text: "Hello 👋 Welcome! I’m Kind Fintech Bot.\nI can help you with HR topics like leave, salary, and policies.\n\nHow can I assist you today?"
         }]
       });
     }
@@ -50,22 +49,44 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
     const intent = detectIntent(message);
 
-    // ✅ GREETING AFTER FIRST
+    // ✅ GREETING
     if (intent === "greeting") {
       return res.json({
         action: "reply",
         replies: [{
           type: "text",
-          text: "Hi 👋 What can I help you with?"
+          text: "Hi 👋 How can I help you today?"
         }]
       });
     }
 
-    // 🔍 FAQ MATCH
+    // ✅ IDENTITY
+    if (intent === "identity") {
+      return res.json({
+        action: "reply",
+        replies: [{
+          type: "text",
+          text: "I’m Kind Fintech Bot 🤖 I help you with HR policies like leave, salary, and working hours."
+        }]
+      });
+    }
+
+    // ✅ CAPABILITY
+    if (intent === "capability") {
+      return res.json({
+        action: "reply",
+        replies: [{
+          type: "text",
+          text: "I can help you with HR topics like leave policies, working hours, salary, and more. What would you like to know?"
+        }]
+      });
+    }
+
+    // 🔍 FAQ SEARCH
     const matchedFAQs = searchFAQ(message);
 
-    // 🚫 NO MATCH → FALLBACK
-    if (matchedFAQs.length === 0) {
+    // 🚫 NO MATCH (fallback)
+    if (matchedFAQs.length === 0 && intent === "policy") {
       session.failureCount++;
 
       return res.json({
@@ -81,7 +102,8 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     const reply = await generateReply({
       message,
       contextFAQs: matchedFAQs,
-      history: session.history
+      history: session.history,
+      intent
     });
 
     session.history.push(`User: ${message}`);
