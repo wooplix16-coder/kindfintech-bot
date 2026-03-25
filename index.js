@@ -2,6 +2,7 @@ const express = require("express");
 const { searchFAQ } = require("./services/faqService");
 const { detectIntent } = require("./services/intentService");
 const { generateAIReply } = require("./services/aiService");
+const { extractStructuredData } = require("./services/memoryService");
 
 const app = express();
 app.use(express.json());
@@ -29,11 +30,6 @@ function extractSessionId(body) {
   return body?.visitor?.id || "default";
 }
 
-function extractName(msg) {
-  const match = msg.match(/my name is (\w+)/i);
-  return match ? match[1] : null;
-}
-
 // =====================
 // WEBHOOK
 // =====================
@@ -45,6 +41,7 @@ app.post("/api/salesiq/webhook", async (req, res) => {
   if (!sessions[sessionId]) {
     sessions[sessionId] = {
       name: null,
+      memory: {}, // 🔥 NEW
       history: [],
       greeted: false
     };
@@ -74,50 +71,68 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     else {
 
       // =====================
-      // STORE NAME
+      // EXTRACT STRUCTURED DATA
       // =====================
-      const name = extractName(message);
-      if (name) {
-        session.name = name;
-        reply = `Got it, ${name}.`;
+      const data = extractStructuredData(message);
+
+      // Store name
+      if (data.name) {
+        session.name = data.name;
+        reply = `Got it, ${data.name}.`;
       }
 
-      else if (message.toLowerCase().includes("my name")) {
-        reply = session.name
-          ? `Your name is ${session.name}.`
-          : "You haven’t told me your name yet.";
-      }
-
+      // =====================
+      // STORE GENERIC MEMORY
+      // =====================
       else {
 
-        const intent = detectIntent(message);
+        if (data.topic && data.value !== undefined) {
 
-        // =====================
-        // FAQ FIRST (PRIORITY)
-        // =====================
-        const faqs = searchFAQ(message);
+          if (!session.memory[data.topic]) {
+            session.memory[data.topic] = {};
+          }
 
-        if (faqs.length > 0) {
-
-          let answer = faqs[0].answer;
-
-          // FIX PERSONALIZATION ERROR
-          answer = answer
-            .replace("you have", "employees receive")
-            .replace("you get", "employees get");
-
-          reply = answer;
+          session.memory[data.topic][data.type || "value"] = data.value;
         }
 
         // =====================
-        // AI FALLBACK
+        // NAME RECALL
         // =====================
+        if (message.toLowerCase().includes("my name")) {
+          reply = session.name
+            ? `Your name is ${session.name}.`
+            : "You haven’t told me your name yet.";
+        }
+
         else {
-          reply = await generateAIReply({
-            message,
-            history: session.history.slice(-5),
-            name: session.name
-          });
+
+          // =====================
+          // FAQ PRIORITY
+          // =====================
+          const faqs = searchFAQ(message);
+
+          if (faqs.length > 0) {
+
+            let answer = faqs[0].answer;
+
+            answer = answer
+              .replace("you have", "employees receive")
+              .replace("you get", "employees get");
+
+            reply = answer;
+          }
+
+          // =====================
+          // AI REASONING
+          // =====================
+          else {
+            reply = await generateAIReply({
+              message,
+              history: session.history.slice(-5),
+              name: session.name,
+              memory: session.memory
+            });
+          }
         }
       }
     }
