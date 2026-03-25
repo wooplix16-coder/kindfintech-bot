@@ -1,99 +1,112 @@
 const express = require("express");
 const { searchFAQ } = require("./services/faqService");
-const { generateAIReply } = require("./services/aiService");
-const { extractFactsAI } = require("./services/memoryService");
+const { processMessage } = require("./services/aiService");
 
 const app = express();
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
+// =====================
+// SESSION MEMORY
+// =====================
 const sessions = {};
 
+// =====================
+// HELPERS
+// =====================
 function extractMessage(body) {
-  return body?.message?.text || body?.message || "";
+  return (body?.message?.text || body?.message || "").trim();
 }
 
 function extractSessionId(body) {
   return body?.visitor?.id || "default";
 }
 
+// =====================
+// WEBHOOK
+// =====================
 app.post("/api/salesiq/webhook", async (req, res) => {
-
   const message = extractMessage(req.body);
   const sessionId = extractSessionId(req.body);
+
+  console.log("📩 Incoming:", message);
+
+  if (!message) {
+    return res.json({
+      action: "reply",
+      replies: [{ type: "text", text: "I didn’t catch that. Can you rephrase?" }]
+    });
+  }
 
   if (!sessions[sessionId]) {
     sessions[sessionId] = {
       memory: {},
       history: [],
-      greeted: false
+      lastActive: Date.now()
     };
   }
 
   const session = sessions[sessionId];
-
-  let reply = "";
+  session.lastActive = Date.now();
 
   try {
+    const faqContext = searchFAQ(message);
 
-    // FIRST GREETING
-    if (!session.greeted) {
-      session.greeted = true;
-      reply = "Hello 👋 I’m Kind Fintech Bot.";
-    }
+    const { reply, memoryUpdates } = await processMessage({
+      message,
+      memory: session.memory,
+      history: session.history.slice(-8),
+      faqContext
+    });
 
-    else {
-
-      // =====================
-      // AI FACT EXTRACTION
-      // =====================
-      const facts = await extractFactsAI(message, session.memory);
-
-      // MERGE MEMORY
-      if (facts.name) {
-        session.memory.name = facts.name;
-      }
-
-      if (facts.topic && facts.value !== undefined) {
-        if (!session.memory[facts.topic]) {
-          session.memory[facts.topic] = {};
+    // =====================
+    // SAFE MEMORY MERGE
+    // =====================
+    if (memoryUpdates) {
+      for (const key in memoryUpdates) {
+        if (
+          typeof memoryUpdates[key] === "number" &&
+          typeof session.memory[key] === "number"
+        ) {
+          session.memory[key] += memoryUpdates[key];
+        } else {
+          session.memory[key] = memoryUpdates[key];
         }
-
-        session.memory[facts.topic][facts.type || "value"] = facts.value;
       }
-
-      // =====================
-      // FAQ CONTEXT (NOT CONTROL)
-      // =====================
-      const faqs = searchFAQ(message);
-
-      const faqContext = faqs.length
-        ? faqs.map(f => `Q:${f.question} A:${f.answer}`).join("\n")
-        : "None";
-
-      // =====================
-      // AI RESPONSE
-      // =====================
-      reply = await generateAIReply({
-        message,
-        memory: session.memory,
-        history: session.history.slice(-5),
-        faqContext
-      });
     }
 
-    // SAVE HISTORY
-    session.history.push(`User: ${message}`);
-    session.history.push(`Bot: ${reply}`);
+    console.log("🧠 Memory:", session.memory);
+    console.log("🤖 Reply:", reply);
+
+    session.history.push({ role: "user", content: message });
+    session.history.push({ role: "assistant", content: reply });
+
+    return res.json({
+      action: "reply",
+      replies: [{ type: "text", text: reply }]
+    });
 
   } catch (err) {
-    console.error(err);
-    reply = "Something went wrong.";
-  }
+    console.error("❌ ERROR:", err.message);
 
-  return res.json({
-    action: "reply",
-    replies: [{ type: "text", text: reply }]
-  });
+    return res.json({
+      action: "reply",
+      replies: [{ type: "text", text: "I’m having trouble right now." }]
+    });
+  }
 });
 
-app.listen(3000, () => console.log("🚀 Fully AI Dynamic System"));
+// =====================
+// CLEANUP MEMORY
+// =====================
+setInterval(() => {
+  const now = Date.now();
+  for (const id in sessions) {
+    if (now - sessions[id].lastActive > 2 * 60 * 60 * 1000) {
+      delete sessions[id];
+    }
+  }
+}, 30 * 60 * 1000);
+
+app.listen(PORT, () => console.log("🚀 Server running"));
