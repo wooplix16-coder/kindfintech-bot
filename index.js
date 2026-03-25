@@ -9,9 +9,9 @@ app.use(express.json());
 const sessions = {};
 
 app.post("/api/salesiq/webhook", async (req, res) => {
-  try {
-    console.log("━━━━━━━━━━━━━━━━━━━");
+  let replyText = "Something went wrong.";
 
+  try {
     const message =
       req.body?.message?.text ||
       req.body?.message ||
@@ -27,78 +27,52 @@ app.post("/api/salesiq/webhook", async (req, res) => {
 
     console.log("💬 USER:", message);
 
-    // ✅ ALWAYS FIRST GREETING
+    // ✅ FIRST GREETING
     if (!session.greeted) {
       session.greeted = true;
-
-      console.log("👋 FIRST GREETING");
-
-      return res.json({
-        action: "reply",
-        replies: [{
-          type: "text",
-          text: "Hello 👋 I’m Kind Fintech Bot.\nHow can I help you today?"
-        }]
-      });
+      replyText = "Hello 👋 I’m Kind Fintech Bot. How can I help you today?";
     }
 
-    if (!message || message.trim() === "") {
-      return res.json({ action: "reply", replies: [] });
+    else if (!message || message.trim() === "") {
+      replyText = "";
     }
 
-    const intent = detectIntent(message);
+    else {
+      const intent = detectIntent(message);
 
-    console.log("🧠 INTENT:", intent);
+      console.log("🧠 INTENT:", intent);
 
-    // ✅ IDENTITY
-    if (intent === "identity") {
-      return res.json({
-        action: "reply",
-        replies: [{
-          type: "text",
-          text: "I’m Kind Fintech Bot 🤖 I help with HR policies and queries."
-        }]
-      });
+      if (intent === "identity") {
+        replyText = "I’m Kind Fintech Bot 🤖 I help with HR queries.";
+      }
+
+      else if (intent === "greeting") {
+        replyText = "Hi 👋 How can I help you?";
+      }
+
+      else {
+        const matchedFAQs = searchFAQ(message);
+
+        replyText = await generateReply({
+          message,
+          contextFAQs: matchedFAQs,
+          intent
+        });
+      }
     }
-
-    // ✅ GREETING
-    if (intent === "greeting") {
-      return res.json({
-        action: "reply",
-        replies: [{
-          type: "text",
-          text: "Hi 👋 How can I help you?"
-        }]
-      });
-    }
-
-    const matchedFAQs = searchFAQ(message);
-
-    const reply = await generateReply({
-      message,
-      contextFAQs: matchedFAQs,
-      intent
-    });
-
-    return res.json({
-      action: "reply",
-      replies: [{
-        type: "text",
-        text: reply
-      }]
-    });
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
-
-    return res.json({
-      action: "reply",
-      replies: [{
-        type: "text",
-        text: "Something went wrong."
-      }]
-    });
+    replyText = "System error occurred.";
   }
+
+  // ✅ ALWAYS RETURN RESPONSE
+  return res.json({
+    action: "reply",
+    replies: replyText
+      ? [{ type: "text", text: replyText }]
+      : []
+  });
 });
 
 app.listen(3000, () => console.log("🚀 Server running"));
