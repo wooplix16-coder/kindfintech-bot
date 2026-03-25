@@ -1,9 +1,7 @@
-console.log("🚀 DEBUG MODE SERVER STARTED");
-
 const express = require("express");
 const { searchFAQ } = require("./services/faqService");
 const { detectIntent } = require("./services/intentService");
-const { generateReply } = require("./services/aiService");
+const { generateAIReply } = require("./services/aiService");
 
 const app = express();
 app.use(express.json());
@@ -11,147 +9,134 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =====================
-// 🔍 EXTRACT MESSAGE (ROBUST)
+// SESSION STORE
+// =====================
+const sessions = {};
+
+// =====================
+// HELPERS
 // =====================
 function extractMessage(body) {
   return (
     body?.message?.text ||
     body?.data?.message ||
     body?.message ||
-    body?.text ||
-    body?.input ||
     ""
   );
 }
 
-// =====================
-// 🔍 EXTRACT SESSION ID
-// =====================
 function extractSessionId(body) {
-  return (
-    body?.visitor?.id ||
-    body?.chat?.id ||
-    body?.session_id ||
-    "default"
-  );
+  return body?.visitor?.id || "default";
+}
+
+function extractName(msg) {
+  const match = msg.match(/my name is (\w+)/i);
+  return match ? match[1] : null;
 }
 
 // =====================
-// 🧠 SESSION MEMORY
-// =====================
-const sessions = {};
-
-// =====================
-// 🚀 WEBHOOK
+// WEBHOOK
 // =====================
 app.post("/api/salesiq/webhook", async (req, res) => {
 
-  console.log("\n================ NEW REQUEST ================");
-  console.log("🔥 FULL BODY:\n", JSON.stringify(req.body, null, 2));
+  const message = extractMessage(req.body);
+  const sessionId = extractSessionId(req.body);
 
-  let replyText = "Something went wrong.";
+  if (!sessions[sessionId]) {
+    sessions[sessionId] = {
+      name: null,
+      history: [],
+      greeted: false
+    };
+  }
+
+  const session = sessions[sessionId];
+
+  let reply = "";
 
   try {
-    const message = extractMessage(req.body);
-    const sessionId = extractSessionId(req.body);
-
-    console.log("🧾 Extracted Message:", message);
-    console.log("🆔 Session ID:", sessionId);
-
-    // 🔹 INIT SESSION
-    if (!sessions[sessionId]) {
-      sessions[sessionId] = { greeted: false };
-    }
-
-    const session = sessions[sessionId];
 
     // =====================
-    // ❌ EMPTY MESSAGE FIX
+    // EMPTY
     // =====================
     if (!message || message.trim() === "") {
-      console.log("⚠️ Empty message received");
-
-      replyText = "Hello 👋 How can I help you today?";
+      reply = "Hello 👋";
     }
 
     // =====================
-    // 👋 FIRST GREETING
+    // FIRST GREETING
     // =====================
     else if (!session.greeted) {
       session.greeted = true;
-
-      replyText = "Hello 👋 I’m Kind Fintech Bot. How can I help you today?";
-      console.log("👋 First greeting sent");
+      reply = "Hello 👋 I’m Kind Fintech Bot.";
     }
 
     else {
-      console.log("💬 USER:", message);
-
-      const intent = detectIntent(message);
-      console.log("🧠 INTENT:", intent);
 
       // =====================
-      // 🎯 INTENT HANDLING
+      // STORE NAME
       // =====================
-      if (intent === "greeting") {
-        replyText = "Hi 👋 How can I help you?";
+      const name = extractName(message);
+      if (name) {
+        session.name = name;
+        reply = `Got it, ${name}.`;
       }
 
-      else if (intent === "identity") {
-        replyText = "I’m Kind Fintech Bot 🤖 I assist with HR-related queries.";
+      else if (message.toLowerCase().includes("my name")) {
+        reply = session.name
+          ? `Your name is ${session.name}.`
+          : "You haven’t told me your name yet.";
       }
 
       else {
-        const matchedFAQs = searchFAQ(message);
-        console.log("📚 FAQ MATCH COUNT:", matchedFAQs.length);
 
-        replyText = await generateReply({
-          message,
-          contextFAQs: matchedFAQs,
-          intent
-        });
+        const intent = detectIntent(message);
 
-        console.log("🤖 AI RESPONSE:", replyText);
+        // =====================
+        // FAQ FIRST (PRIORITY)
+        // =====================
+        const faqs = searchFAQ(message);
+
+        if (faqs.length > 0) {
+
+          let answer = faqs[0].answer;
+
+          // FIX PERSONALIZATION ERROR
+          answer = answer
+            .replace("you have", "employees receive")
+            .replace("you get", "employees get");
+
+          reply = answer;
+        }
+
+        // =====================
+        // AI FALLBACK
+        // =====================
+        else {
+          reply = await generateAIReply({
+            message,
+            history: session.history.slice(-5),
+            name: session.name
+          });
+        }
       }
     }
 
-  } catch (error) {
-    console.error("🔥 ERROR OCCURRED:", error);
-    replyText = "System error occurred. Please try again.";
+    // =====================
+    // SAVE HISTORY
+    // =====================
+    session.history.push(`User: ${message}`);
+    session.history.push(`Bot: ${reply}`);
+
+  } catch (err) {
+    console.error("ERROR:", err);
+    reply = "Something went wrong.";
   }
 
-  // =====================
-  // ✅ ALWAYS RETURN VALID RESPONSE
-  // =====================
-  const responsePayload = {
+  return res.json({
     action: "reply",
-    replies: [
-      {
-        type: "text",
-        text: replyText || "Sorry, I couldn’t respond."
-      }
-    ]
-  };
-
-  console.log("📤 FINAL RESPONSE:\n", JSON.stringify(responsePayload, null, 2));
-  console.log("============== END REQUEST ==============\n");
-
-  return res.json(responsePayload);
-});
-
-// =====================
-// ❤️ HEALTH CHECK
-// =====================
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    debug: true
+    replies: [{ type: "text", text: reply }]
   });
 });
 
-// =====================
-// 🚀 START SERVER
-// =====================
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log("🚀 AI Assistant Running"));
