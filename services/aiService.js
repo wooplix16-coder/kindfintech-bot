@@ -2,41 +2,23 @@ const axios = require("axios");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateReply({ message, contextFAQs, intent }) {
-
-  console.log("🤖 AI CALLED | Intent:", intent);
-
-  if (!GEMINI_API_KEY) {
-    console.error("❌ Missing API Key");
-    return "AI not configured.";
-  }
-
-  // 🚫 prevent bad answers
-  if (intent === "policy" && contextFAQs.length === 0) {
-    return "I’m not sure about that 🤔 but I can help with HR topics like leave, salary, and working hours.";
-  }
-
-  const faqContext = contextFAQs.length
-    ? contextFAQs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")
-    : "No FAQ";
+async function generateAIReply({ message, history, name }) {
 
   const prompt = `
-You are Kind Fintech HR Bot.
-
-Behavior:
-- Greeting → greet properly
-- Identity → introduce yourself
-- Definition → explain concept
-- Policy → answer from FAQ
-- Unknown → guide to HR topics
+You are Kind Fintech HR Assistant.
 
 Rules:
-- Keep answers short
-- Be human-like
-- No hallucination
+- Be natural, not robotic
+- Do NOT repeat greetings unnecessarily
+- If name exists, use it naturally
+- Keep answers short (2-3 lines)
+- For HR topics → general guidance only
+- Do NOT assume personal data
 
-FAQ:
-${faqContext}
+User Name: ${name || "Unknown"}
+
+Conversation:
+${history.join("\n")}
 
 User: ${message}
 
@@ -51,17 +33,13 @@ Answer:
       }
     );
 
-    const reply =
-      res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    console.log("✅ AI RESPONSE:", reply);
-
-    return reply || "Sorry, I couldn’t understand.";
+    return res.data?.candidates?.[0]?.content?.parts?.[0]?.text
+      || "I couldn't understand that.";
 
   } catch (err) {
-    console.error("❌ GEMINI ERROR:", err.response?.data || err.message);
+    console.error("AI ERROR:", err.response?.data || err.message);
     return "I’m having trouble responding right now.";
   }
 }
 
-module.exports = { generateReply };
+module.exports = { generateAIReply };
