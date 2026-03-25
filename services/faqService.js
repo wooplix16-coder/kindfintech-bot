@@ -16,16 +16,11 @@ function searchFAQ(message) {
   });
 
   const filtered = results
-    .filter(f => f.score > 0)
+    .filter(f => f.score >= 1)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 
-  if (process.env.DEBUG === "true") {
-    console.log("📊 FAQ MATCH RESULTS:");
-    filtered.forEach(f =>
-      console.log(`→ ${f.question} | score=${f.score}`)
-    );
-  }
+  console.log("📊 FAQ MATCH:", filtered.length);
 
   return filtered;
 }
