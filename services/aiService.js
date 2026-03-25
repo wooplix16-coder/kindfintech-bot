@@ -2,20 +2,18 @@ const axios = require("axios");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-async function generateReply({ message, contextFAQs, history, intent }) {
+async function generateReply({ message, contextFAQs, intent }) {
 
-  console.log("🤖 AI CALLED");
-  console.log("➡️ Intent:", intent);
-  console.log("➡️ FAQs:", contextFAQs.length);
+  console.log("🤖 AI CALLED | Intent:", intent);
 
   if (!GEMINI_API_KEY) {
-    console.error("❌ GEMINI_API_KEY MISSING");
-    return "AI is not configured properly.";
+    console.error("❌ Missing API Key");
+    return "AI not configured.";
   }
 
+  // 🚫 prevent bad answers
   if (intent === "policy" && contextFAQs.length === 0) {
-    console.log("⚠️ No FAQ → safe fallback");
-    return "I’m not fully sure about that 🤔 but I can help with HR topics.";
+    return "I’m not sure about that 🤔 but I can help with HR topics like leave, salary, and working hours.";
   }
 
   const faqContext = contextFAQs.length
@@ -23,15 +21,19 @@ async function generateReply({ message, contextFAQs, history, intent }) {
     : "No FAQ";
 
   const prompt = `
-You are a smart HR assistant chatbot.
+You are Kind Fintech HR Bot.
 
-Intent: ${intent}
+Behavior:
+- Greeting → greet properly
+- Identity → introduce yourself
+- Definition → explain concept
+- Policy → answer from FAQ
+- Unknown → guide to HR topics
 
 Rules:
-- Definition → explain
-- Policy → use FAQ
-- Identity → introduce yourself
-- Keep short
+- Keep answers short
+- Be human-like
+- No hallucination
 
 FAQ:
 ${faqContext}
@@ -42,10 +44,8 @@ Answer:
 `;
 
   try {
-    console.log("📡 Calling Gemini...");
-
     const res = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: prompt }] }]
       }
@@ -54,13 +54,12 @@ Answer:
     const reply =
       res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    console.log("✅ Gemini Response:", reply);
+    console.log("✅ AI RESPONSE:", reply);
 
-    return reply || "No response from AI.";
+    return reply || "Sorry, I couldn’t understand.";
 
   } catch (err) {
     console.error("❌ GEMINI ERROR:", err.response?.data || err.message);
-
     return "I’m having trouble responding right now.";
   }
 }
