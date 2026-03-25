@@ -1,7 +1,7 @@
 function detectIntent(message) {
   const msg = message.toLowerCase();
 
-  if (["hi", "hello", "hey"].some(g => msg.includes(g))) {
+  if (["hi", "hello", "hey", "good morning", "good evening"].some(g => msg.includes(g))) {
     return "greeting";
   }
 
@@ -20,7 +20,8 @@ function detectIntent(message) {
   if (
     msg.includes("how many") ||
     msg.includes("policy") ||
-    msg.includes("leave")
+    msg.includes("leave") ||
+    msg.includes("salary")
   ) {
     return "policy";
   }
