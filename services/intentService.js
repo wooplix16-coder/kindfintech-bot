@@ -1,29 +1,35 @@
 function detectIntent(message) {
   const msg = message.toLowerCase();
 
-  let intent = "unknown";
+  const greetings = ["hi", "hello", "hey"];
 
-  if (["hi", "hello", "hey"].some(g => msg.includes(g))) {
-    intent = "greeting";
-  } else if (msg.includes("your name") || msg.includes("who are you")) {
-    intent = "identity";
-  } else if (msg.includes("what can you do") || msg.includes("help")) {
-    intent = "capability";
-  } else if (msg.startsWith("what is") || msg.startsWith("define")) {
-    intent = "definition";
-  } else if (
+  // 🔥 handle typos like "hwllo"
+  if (greetings.some(g => msg.includes(g)) || msg.length <= 5) {
+    return "greeting";
+  }
+
+  if (msg.includes("your name") || msg.includes("who are you")) {
+    return "identity";
+  }
+
+  if (msg.includes("what can you do") || msg.includes("help")) {
+    return "capability";
+  }
+
+  if (msg.startsWith("what is") || msg.startsWith("define")) {
+    return "definition";
+  }
+
+  if (
     msg.includes("how many") ||
     msg.includes("policy") ||
-    msg.includes("leave")
+    msg.includes("leave") ||
+    msg.includes("salary")
   ) {
-    intent = "policy";
+    return "policy";
   }
 
-  if (process.env.DEBUG === "true") {
-    console.log("🧠 INTENT:", intent, "| MESSAGE:", message);
-  }
-
-  return intent;
+  return "unknown";
 }
 
 module.exports = { detectIntent };
