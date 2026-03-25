@@ -7,13 +7,25 @@
     "question": "What is the casual leave policy?",
     "answer": "Employees are entitled to 12 casual leaves per year, subject to manager approval."
   },
+   {
+    "question": "how many leaves do i have",
+    "answer": "You have 12 casual leaves and 10 sick leaves annually."
+  },
   {
     "question": "How many casual leaves do we get?",
     "answer": "Employees receive 12 casual leaves annually."
   },
   {
-    "question": "Can casual leave be carried forward?",
-    "answer": "Casual leave cannot be carried forward and must be used within the year."
+    "question": "i have already taken 3 casual leave",
+    "answer": "Okay, noted"
+  },
+    {
+    "question": "2 sick leave also taken",
+    "answer": "Okay, noted"
+  },
+  {
+    "question": "how many do i have now",
+    "answer": "You have 9 casual leaves and 8 sick leaves remaining."
   },
   {
     "question": "What is sick leave?",
