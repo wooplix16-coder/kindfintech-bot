@@ -1,15 +1,15 @@
 function extractStructuredData(message) {
   const lower = message.toLowerCase();
 
-  let data = {};
+  const data = {};
 
-  // Extract name
+  // Name extraction
   const nameMatch = message.match(/my name is (\w+)/i);
   if (nameMatch) {
     data.name = nameMatch[1];
   }
 
-  // Extract numbers with context
+  // Extract number
   const numberMatch = message.match(/(\d+)/);
   if (numberMatch) {
     data.value = parseInt(numberMatch[1]);
@@ -20,7 +20,7 @@ function extractStructuredData(message) {
   else if (lower.includes("hour")) data.topic = "hours";
   else if (lower.includes("task")) data.topic = "tasks";
 
-  // Detect action
+  // Detect type
   if (lower.includes("taken") || lower.includes("used")) {
     data.type = "used";
   }
