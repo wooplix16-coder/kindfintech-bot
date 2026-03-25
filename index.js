@@ -5,8 +5,16 @@ const { processMessage } = require("./services/aiService");
 const app = express();
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
+// =====================
+// SESSION MEMORY
+// =====================
 const sessions = {};
 
+// =====================
+// HELPERS
+// =====================
 function extractMessage(body) {
   return (body?.message?.text || body?.message || "").trim();
 }
@@ -15,41 +23,62 @@ function extractSessionId(body) {
   return body?.visitor?.id || "default";
 }
 
+// =====================
+// WEBHOOK
+// =====================
 app.post("/api/salesiq/webhook", async (req, res) => {
   const message = extractMessage(req.body);
   const sessionId = extractSessionId(req.body);
 
+  console.log("📩 Incoming:", message);
+
   if (!message) {
     return res.json({
       action: "reply",
-      replies: [{ type: "text", text: "I didn't catch that. Could you rephrase?" }]
+      replies: [{ type: "text", text: "I didn’t catch that. Can you rephrase?" }]
     });
   }
 
   if (!sessions[sessionId]) {
-    sessions[sessionId] = { memory: {}, history: [] };
+    sessions[sessionId] = {
+      memory: {},
+      history: [],
+      lastActive: Date.now()
+    };
   }
 
   const session = sessions[sessionId];
+  session.lastActive = Date.now();
 
   try {
-    // Get relevant FAQ context
     const faqContext = searchFAQ(message);
 
-    // Single AI call that handles everything
     const { reply, memoryUpdates } = await processMessage({
       message,
       memory: session.memory,
-      history: session.history.slice(-8), // last 4 exchanges
+      history: session.history.slice(-8),
       faqContext
     });
 
-    // Merge memory updates returned by AI
-    if (memoryUpdates && typeof memoryUpdates === "object") {
-      session.memory = { ...session.memory, ...memoryUpdates };
+    // =====================
+    // SAFE MEMORY MERGE
+    // =====================
+    if (memoryUpdates) {
+      for (const key in memoryUpdates) {
+        if (
+          typeof memoryUpdates[key] === "number" &&
+          typeof session.memory[key] === "number"
+        ) {
+          session.memory[key] += memoryUpdates[key];
+        } else {
+          session.memory[key] = memoryUpdates[key];
+        }
+      }
     }
 
-    // Store history as pairs
+    console.log("🧠 Memory:", session.memory);
+    console.log("🤖 Reply:", reply);
+
     session.history.push({ role: "user", content: message });
     session.history.push({ role: "assistant", content: reply });
 
@@ -59,13 +88,25 @@ app.post("/api/salesiq/webhook", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("WEBHOOK ERROR:", err.message);
+    console.error("❌ ERROR:", err.message);
+
     return res.json({
       action: "reply",
-      replies: [{ type: "text", text: "I'm having a moment. Please try again." }]
+      replies: [{ type: "text", text: "I’m having trouble right now." }]
     });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 HR Bot running on port ${PORT}`));
+// =====================
+// CLEANUP MEMORY
+// =====================
+setInterval(() => {
+  const now = Date.now();
+  for (const id in sessions) {
+    if (now - sessions[id].lastActive > 2 * 60 * 60 * 1000) {
+      delete sessions[id];
+    }
+  }
+}, 30 * 60 * 1000);
+
+app.listen(PORT, () => console.log("🚀 Server running"));
